@@ -4,10 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { ArrowUpRight, Bell, CalendarDays, Check, Clock3, FileText, LockKeyhole, Plus, Search, ShieldCheck, Trash2 } from 'lucide-react';
 import './styles.css';
 
-const EXAMPLE = [
-  { id: 1, receipt: 'IOE0912345678', type: 'I-485', label: 'Residencia permanente', status: 'Caso en revisiÃ³n activa', updated: '8 jul 2026', step: 2, note: 'USCIS estÃ¡ revisando tu caso. No necesitas enviar nada por ahora.' },
-  { id: 2, receipt: 'IOE0987654321', type: 'I-765', label: 'Permiso de trabajo', status: 'Tarjeta producida', updated: '3 jul 2026', step: 4, note: 'Tu nueva tarjeta fue producida y pronto serÃ¡ enviada.' }
-];
+const EXAMPLE = [];
 
 const STEPS = ['Recibido', 'En revisiÃ³n', 'DecisiÃ³n', 'Completado'];
 const cleanReceipt = (value) => value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 13);
@@ -15,11 +12,13 @@ const cleanReceipt = (value) => value.toUpperCase().replace(/[^A-Z0-9]/g, '').sl
 function App() {
   const [cases, setCases] = useState(() => {
     const saved = localStorage.getItem('uscis-cases');
-    return saved ? JSON.parse(saved) : EXAMPLE;
+    const sampleReceipts = new Set(['IOE0912345678', 'IOE0987654321']);
+    return saved ? JSON.parse(saved).filter((item) => !sampleReceipts.has(item.receipt)) : EXAMPLE;
   });
   const [receipt, setReceipt] = useState('');
   const [active, setActive] = useState(cases[0]?.id ?? null);
   const [adding, setAdding] = useState(false);
+  const [notice, setNotice] = useState('');
 
   useEffect(() => localStorage.setItem('uscis-cases', JSON.stringify(cases)), [cases]);
   const selected = useMemo(() => cases.find((item) => item.id === active) ?? cases[0], [cases, active]);
@@ -28,7 +27,7 @@ function App() {
     event.preventDefault();
     const normalized = cleanReceipt(receipt);
     if (!/^[A-Z]{3}[0-9]{10}$/.test(normalized)) return;
-    const item = { id: Date.now(), receipt: normalized, type: 'Caso USCIS', label: 'Nuevo seguimiento', status: 'Listo para consultar', updated: 'Hoy', step: 1, note: 'Abre la consulta oficial para confirmar el estado mÃ¡s reciente de este caso.' };
+    const item = { id: Date.now(), receipt: normalized, type: 'Caso USCIS', label: 'Expediente personal', status: 'Pendiente de consultar', updated: 'Sin consultar', step: 1, note: 'Consulta el caso en USCIS y guarda aquÃ­ la Ãºltima notificaciÃ³n.' };
     setCases((current) => [item, ...current]);
     setActive(item.id); setReceipt(''); setAdding(false);
   }
@@ -36,6 +35,13 @@ function App() {
   function removeCase(id) {
     setCases((current) => current.filter((item) => item.id !== id));
     if (active === id) setActive(null);
+  }
+
+  function saveNotice() {
+    if (!selected || !notice.trim()) return;
+    const today = new Intl.DateTimeFormat('es-US', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date());
+    setCases((current) => current.map((item) => item.id === selected.id ? { ...item, status: notice.trim(), note: notice.trim(), updated: today, step: Math.max(item.step, 2) } : item));
+    setNotice('');
   }
 
   const officialUrl = selected ? `https://egov.uscis.gov/casestatus/landing.do` : 'https://egov.uscis.gov/';
@@ -73,7 +79,8 @@ function App() {
             <div className="detail-top"><div><span className="status-pill">EN PROGRESO</span><h2>{selected.status}</h2><p>{selected.note}</p></div><button className="delete" onClick={() => removeCase(selected.id)} aria-label="Eliminar caso"><Trash2 size={18}/></button></div>
             <div className="timeline" aria-label="Progreso del caso">{STEPS.map((step, index) => <div key={step} className={index < selected.step ? 'done' : ''}><span>{index < selected.step ? <Check size={14}/> : index + 1}</span><b>{step}</b></div>)}</div>
             <div className="info-grid"><div><CalendarDays size={19}/><span><small>Ãšltima actualizaciÃ³n</small><b>{selected.updated}</b></span></div><div><Clock3 size={19}/><span><small>NÃºmero de recibo</small><b>{selected.receipt}</b></span></div></div>
-            <div className="official-box"><div><ShieldCheck size={22}/><span><b>Confirma siempre en la fuente oficial</b><small>Esta aplicaciÃ³n te ayuda a organizarte. El estado vÃ¡lido es el publicado por USCIS.</small></span></div><a href={officialUrl} target="_blank" rel="noreferrer">Abrir USCIS.gov <ArrowUpRight size={16}/></a></div>
+            <div className="official-box"><div><ShieldCheck size={22}/><span><b>1. Consulta el estado oficial</b><small>Escribe allÃ­ el nÃºmero {selected.receipt} y revisa la notificaciÃ³n mÃ¡s reciente.</small></span></div><a href={officialUrl} target="_blank" rel="noreferrer">Consultar en USCIS <ArrowUpRight size={16}/></a></div>
+            <div className="notice-editor"><label htmlFor="latest-notice">2. Guarda la Ãºltima notificaciÃ³n</label><textarea id="latest-notice" value={notice} onChange={(event) => setNotice(event.target.value)} placeholder="Ejemplo: El caso estÃ¡ siendo revisado activamente por USCISâ€¦"/><button className="primary" onClick={saveNotice} disabled={!notice.trim()}><Check size={17}/> Guardar actualizaciÃ³n</button></div>
           </> : <div className="empty-detail"><FileText size={34}/><h2>Agrega tu primer caso</h2><p>Solo necesitas el nÃºmero de recibo de 13 caracteres.</p><button className="primary" onClick={() => setAdding(true)}><Plus size={18}/> Agregar caso</button></div>}
         </article>
       </section>
