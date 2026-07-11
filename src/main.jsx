@@ -19,6 +19,8 @@ function App() {
   const [active, setActive] = useState(cases[0]?.id ?? null);
   const [adding, setAdding] = useState(false);
   const [notice, setNotice] = useState('');
+  const [checking, setChecking] = useState(false);
+  const [queryError, setQueryError] = useState('');
 
   useEffect(() => localStorage.setItem('uscis-cases', JSON.stringify(cases)), [cases]);
   const selected = useMemo(() => cases.find((item) => item.id === active) ?? cases[0], [cases, active]);
@@ -42,6 +44,25 @@ function App() {
     const today = new Intl.DateTimeFormat('es-US', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date());
     setCases((current) => current.map((item) => item.id === selected.id ? { ...item, status: notice.trim(), note: notice.trim(), updated: today, step: Math.max(item.step, 2) } : item));
     setNotice('');
+  }
+
+  async function queryCase() {
+    if (!selected) return;
+    setChecking(true);
+    setQueryError('');
+    try {
+      const response = await fetch(`/api/case-status/${selected.receipt}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'No se pudo consultar el caso.');
+      const status = data.case_status || data.caseStatus || data;
+      const title = status.current_case_status_text_es || status.current_case_status_text_en || 'ActualizaciÃ³n recibida';
+      const description = status.current_case_status_desc_es || status.current_case_status_desc_en || title;
+      setCases((current) => current.map((item) => item.id === selected.id ? { ...item, type: status.formType || item.type, status: title, note: description.replace(/<[^>]*>/g, ''), updated: status.modifiedDate || 'Actualizado ahora', step: Math.max(item.step, 2) } : item));
+    } catch (error) {
+      setQueryError(error.message);
+    } finally {
+      setChecking(false);
+    }
   }
 
   const officialUrl = selected ? `https://egov.uscis.gov/casestatus/landing.do` : 'https://egov.uscis.gov/';
@@ -79,8 +100,9 @@ function App() {
             <div className="detail-top"><div><span className="status-pill">EN PROGRESO</span><h2>{selected.status}</h2><p>{selected.note}</p></div><button className="delete" onClick={() => removeCase(selected.id)} aria-label="Eliminar caso"><Trash2 size={18}/></button></div>
             <div className="timeline" aria-label="Progreso del caso">{STEPS.map((step, index) => <div key={step} className={index < selected.step ? 'done' : ''}><span>{index < selected.step ? <Check size={14}/> : index + 1}</span><b>{step}</b></div>)}</div>
             <div className="info-grid"><div><CalendarDays size={19}/><span><small>Ãšltima actualizaciÃ³n</small><b>{selected.updated}</b></span></div><div><Clock3 size={19}/><span><small>NÃºmero de recibo</small><b>{selected.receipt}</b></span></div></div>
-            <div className="official-box"><div><ShieldCheck size={22}/><span><b>1. Consulta el estado oficial</b><small>Escribe allÃ­ el nÃºmero {selected.receipt} y revisa la notificaciÃ³n mÃ¡s reciente.</small></span></div><a href={officialUrl} target="_blank" rel="noreferrer">Consultar en USCIS <ArrowUpRight size={16}/></a></div>
-            <div className="notice-editor"><label htmlFor="latest-notice">2. Guarda la Ãºltima notificaciÃ³n</label><textarea id="latest-notice" value={notice} onChange={(event) => setNotice(event.target.value)} placeholder="Ejemplo: El caso estÃ¡ siendo revisado activamente por USCISâ€¦"/><button className="primary" onClick={saveNotice} disabled={!notice.trim()}><Check size={17}/> Guardar actualizaciÃ³n</button></div>
+            <div className="official-box"><div><ShieldCheck size={22}/><span><b>Consulta oficial de USCIS</b><small>Obtiene la Ãºltima notificaciÃ³n disponible para {selected.receipt}.</small></span></div><button className="official-query" onClick={queryCase} disabled={checking}>{checking ? 'Consultandoâ€¦' : 'Actualizar caso'}</button></div>
+            {queryError && <div className="query-error">{queryError} <a href={officialUrl} target="_blank" rel="noreferrer">Consultar manualmente</a></div>}
+            <div className="notice-editor"><label htmlFor="latest-notice">Nota personal opcional</label><textarea id="latest-notice" value={notice} onChange={(event) => setNotice(event.target.value)} placeholder="Agrega aquÃ­ una nota o recordatorio personalâ€¦"/><button className="primary" onClick={saveNotice} disabled={!notice.trim()}><Check size={17}/> Guardar nota</button></div>
           </> : <div className="empty-detail"><FileText size={34}/><h2>Agrega tu primer caso</h2><p>Solo necesitas el nÃºmero de recibo de 13 caracteres.</p><button className="primary" onClick={() => setAdding(true)}><Plus size={18}/> Agregar caso</button></div>}
         </article>
       </section>
