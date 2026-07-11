@@ -38,7 +38,12 @@ app.get('/api/case-status/:receipt', async (request, response) => {
     const token = await getAccessToken();
     const uscisResponse = await fetch(`${apiBase}/case-status/${receipt}`, { headers: { Authorization: `Bearer ${token}` } });
     const data = await uscisResponse.json();
-    if (!uscisResponse.ok) return response.status(uscisResponse.status).json({ error: data?.errors?.[0]?.message || 'USCIS no pudo encontrar el caso.' });
+    if (!uscisResponse.ok) {
+      const sandboxMessage = apiBase.includes('api-int')
+        ? 'La API estÃ¡ en modo de prueba y no acepta casos personales reales. Usa la consulta manual de USCIS o solicita acceso de producciÃ³n.'
+        : 'USCIS no pudo encontrar el caso. Verifica el nÃºmero de recibo.';
+      return response.status(uscisResponse.status).json({ error: data?.errors?.[0]?.message || sandboxMessage });
+    }
     return response.json(data);
   } catch (error) {
     return response.status(502).json({ error: error.message || 'No se pudo conectar con USCIS.' });
